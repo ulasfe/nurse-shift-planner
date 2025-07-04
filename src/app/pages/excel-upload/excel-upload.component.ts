@@ -1,40 +1,31 @@
 import { Component } from '@angular/core';
 import * as XLSX from 'xlsx';
 import { CommonModule } from '@angular/common';
-import { NurseShift } from '../../models/nurse-shift.model'; // Model dosyasına göre yolunu kontrol et
+import { NurseShift, ShiftCode, ShiftEntry, ShiftResponse } from '../../models/nurse-shift.model';
+import { HttpClient, HttpClientModule } from '@angular/common/http';
+import { PivotDisplayComponent } from '../pivot-display/pivot-display.component';
 
 @Component({
   selector: 'app-excel-upload',
   standalone: true,
-  imports: [CommonModule],
-  template: `
-    <h2>Excel Dosyası Yükle</h2>
-    <input type="file" (change)="onFileChange($event)" accept=".xlsx, .xls" />
-    
-    <table *ngIf="data.length > 0" border="1" style="margin-top:20px; width: 100%;">
-      <thead>
-        <tr>
-          <th *ngFor="let col of cols">{{ col.header }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let row of data">
-          <td *ngFor="let col of cols">{{row[col.field]}}</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <button *ngIf="data.length > 0" (click)="prepareAndSend()" style="margin-top: 20px;">
-      Verileri Gönder
-    </button>
-  `
+  imports: [CommonModule,PivotDisplayComponent, HttpClientModule],
+    styleUrls: ['./excel-upload.component.scss'],
+ templateUrl: './excel-upload.component.html',
 })
 export class ExcelUploadComponent {
   data: any[] = [];
   cols: { field: string; header: string }[] = [];
+  shiftData: NurseShift[] = [];
+  scheduleData: any = {};
+  days: string[] = [];
+  nurseList: string[] = [];
+  private scheduleMap = new Map<string, Set<ShiftResponse>>();
+  dayTotals: Record<string, number> = {};
+
+  constructor(private http: HttpClient) {}
 
   onFileChange(evt: any) {
-    const target: DataTransfer = <DataTransfer>(evt.target);
+    const target: DataTransfer = <DataTransfer>evt.target;
     if (target.files.length !== 1) {
       throw new Error('Lütfen tek bir dosya seçin.');
     }
@@ -43,7 +34,6 @@ export class ExcelUploadComponent {
     reader.onload = (e: any) => {
       const bstr: string = e.target.result;
       const wb: XLSX.WorkBook = XLSX.read(bstr, { type: 'binary' });
-
       const wsname: string = wb.SheetNames[wb.SheetNames.length - 1];
       const ws: XLSX.WorkSheet = wb.Sheets[wsname];
 
@@ -61,70 +51,240 @@ export class ExcelUploadComponent {
         }
       });
 
-      const range = XLSX.utils.decode_range(ws['!ref'] as string);
-      const headerRow = 4;
-      this.cols = []; // önceki sütunları sıfırla
-      for (let C = range.s.c; C <= range.e.c; ++C) {
-        const cellRef = XLSX.utils.encode_cell({ r: headerRow, c: C });
-        const cell = ws[cellRef];
-        const header = (cell && cell.v) ? cell.v.toString() : `Column${C + 1}`;
-        this.cols.push({ field: header, header: header });
-        if (header.trim().toUpperCase() === 'TOPLAM') break;
-      }
-
-      const rowStart = 5;
-      const dataRows: any[] = [];
-      for (let R = rowStart; R <= range.e.r; ++R) {
-        const rowObj: any = {};
-        for (let i = 0; i < this.cols.length; ++i) {
-          const C = range.s.c + i;
-          const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+      if (ws && ws['!ref']) {
+        const range = XLSX.utils.decode_range(ws['!ref'] as string);
+        const headerRow = 4;
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellRef = XLSX.utils.encode_cell({ r: headerRow, c: C });
           const cell = ws[cellRef];
-          const key = this.cols[i].field;
-          rowObj[key] = cell ? cell.v : '';
+          const header = cell && cell.v ? cell.v.toString() : `Column${C + 1}`;
+          this.cols.push({ field: header, header });
+          if (header.trim().toUpperCase() === 'TOPLAM') break;
         }
-        dataRows.push(rowObj);
-      }
 
-      this.data = dataRows;
-      console.log('Sütunlar:', this.cols);
-      console.log('Veriler:', this.data);
+        const dataRows: any[] = [];
+        const rowStart = 5;
+        for (let R = rowStart; R <= range.e.r; ++R) {
+          const rowObj: any = {};
+          for (let i = 0; i < this.cols.length; ++i) {
+            const C = range.s.c + i;
+            const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = ws[cellRef];
+            rowObj[this.cols[i].field] = cell ? cell.v : '';
+          }
+          dataRows.push(rowObj);
+        }
+        this.data = dataRows;
+      } else {
+        console.error('Sheet ya da !ref tanımsız.');
+      }
     };
     reader.readAsArrayBuffer(target.files[0]);
   }
 
+  mapShiftCode(code: ShiftCode): ShiftEntry['shiftType'] {
+    switch (code) {
+      case '24': return 'Confirmed';
+      case 'R': return 'Report';
+      case 'İ': return 'Permission';
+      case 'Yİ': return 'Annual';
+      case 'NÇ': return 'AfterShift';
+    }
+  }
+
   prepareAndSend() {
-    const nurseShifts: NurseShift[] = [];
+    const mapShifts = new Map<string, ShiftEntry[]>();
 
-    for (const row of this.data) {
-      const nurseName = row[this.cols[0].field]; // İlk sütun hemşire adı varsayılıyor
-      for (let i = 1; i < this.cols.length; i++) {
-        const day = this.cols[i].field;
-        const value = row[day]?.toString().trim();
+   for (const row of this.data) {
+    const nurseName = row[this.cols[1].field]?.toString().trim();
+    if (!nurseName || nurseName.toUpperCase().includes('TOPLAM')) continue;
 
-        if (value === '24' || value === 'R' || value === 'I' || value === 'Y') {
-          let shiftType: NurseShift['shiftType'];
-
-          switch (value) {
-            case '24': shiftType = 'Confirmed'; break;
-            case 'R': shiftType = 'Report'; break;
-            case 'I': shiftType = 'Permission'; break;
-            case 'Y': shiftType = 'Annual'; break;
-            default: continue;
-          }
-
-          nurseShifts.push({
-            nurseName,
-            date: day,
-            shiftType
-          });
-        }
-      }
+    // Her hemşire için boş da olsa baştan entry oluştur
+    if (!mapShifts.has(nurseName)) {
+      mapShifts.set(nurseName, []);
     }
 
-    console.log('Oluşan JSON:', nurseShifts);
+    for (let i = 2; i < this.cols.length; i++) {  // i=2 çünkü i=1 AD SOYAD
+      const dayStr = this.cols[i].field;
+      const value = row[dayStr]?.toString().trim();
 
-    // TODO: HTTP POST ile gönderme işlemi yapılacak
-    // this.http.post('/api/nurse-shifts', nurseShifts).subscribe(...)
+      if (['24', 'R', 'İ', 'Yİ', 'NÇ'].includes(value)) {
+        const shiftType = this.mapShiftCode(value as ShiftCode);
+// --- Burada DateOnly formatına dönüş yap ---
+    const dayNum = parseInt(dayStr, 10); // Excel başlığından gelen gün numarası
+    const year = new Date().getFullYear();
+    const month = new Date().getMonth() + 2; // JavaScript'te ay 0 tabanlı
+
+    // Ay ve günü 2 basamaklı hale getir
+    const monthStr = month.toString().padStart(2, '0');
+    const day = dayNum.toString().padStart(2, '0');
+
+    const formattedDateOnly = `${year}-${monthStr}-${day}`; // DateOnly formatı: yyyy-MM-dd
+
+
+        const entry: ShiftEntry = { date : formattedDateOnly, shiftType };
+        const entries = mapShifts.get(nurseName) || [];
+        entries.push(entry);
+      }
+    }
+  }
+    
+
+    // Map'ten diziye dönüştür
+    this.shiftData = Array.from(mapShifts.entries()).map(
+      ([nurseName, shifts]) => ({ nurseName, shifts })
+    );
+
+    console.log('Oluşan JSON:', this.shiftData);
+ 
+    
+
+    // HTTP POST
+this.http.post<{ [day: string]: ShiftResponse[] }>('http://localhost:5000/api/NurseShifts', this.shiftData)
+  .subscribe({
+    next: (response) => {
+      this.scheduleMap.clear();
+
+      // NurseName -> Set<ShiftResponse>
+      for (const [day, shifts] of Object.entries(response)) {
+        for (const shift of shifts) {
+          const nurseName = shift.nurseName.trim();
+          if (!this.scheduleMap.has(nurseName)) {
+            this.scheduleMap.set(nurseName, new Set<ShiftResponse>());
+          }
+          this.scheduleMap.get(nurseName)!.add(shift);
+        }
+      }
+
+      // Günleri sırala
+      this.days = Object.keys(response).sort((a, b) => +a - +b);
+     console.log('Gelen data:', response);
+      // Hemşireleri sırala
+      this.nurseList = Array.from(this.scheduleMap.keys()).sort((a, b) =>
+        a.localeCompare(b, 'tr', { sensitivity: 'base' })
+      );
+
+      // Günlük nöbet sayıları
+      this.dayTotals = {};
+      for (const day of this.days) {
+        let count = 0;
+        for (const shifts of this.scheduleMap.values()) {
+          if ([...shifts].some(s => s.day === day && s.shiftType === 'Confirmed')) {
+            count++;
+          }
+        }
+        this.dayTotals[day] = count;
+      }
+
+      alert('Pivot tablo hazır!');
+    },
+    error: err => {
+      console.error('HTTP Hatası:', err);
+      alert('Gönderim sırasında hata oluştu: ' + (err.error?.message || err.message));
+    }
+  });
+
+  }
+
+  mapShiftType(shiftType: string): string {
+  switch (shiftType) {
+    case 'Confirmed': return '24';
+    case 'Report': return 'R';
+    case 'Permission': return 'İ';
+    case 'Annual': return 'Yİ';
+    case 'AfterShift': return 'NÇ';
+    default: return '';
+  }
+}
+
+getNurseWeekendTotal(nurse: string): number {
+  var total = 0;
+  const shifts = this.scheduleMap.get(nurse);
+  if (!shifts) return 0;
+  total =[...shifts].filter(s =>s.isWorkingDay && s.shiftType.trim() === 'Confirmed').length
+  return total ;
+}
+
+getCellClass(nurse: string, day: string): string {
+  const nurseSchedule = this.scheduleMap.get(nurse);
+
+  if (!nurseSchedule) return '';
+
+  const entry = Array.from(nurseSchedule).find(d => d.day === day);
+
+  if (entry && entry.isWorkingDay === false) {
+    return 'weekend-cell'; 
+  }
+
+  return '';
+}
+
+
+
+getCellValue(nurse: string, day: string): string {
+  const shifts = this.scheduleMap.get(nurse);
+  if (!shifts) return '';
+
+  const match = [...shifts].find(s => s.day.toString() === day.toString());
+
+  if (!match) {
+    return '';
+  } else {
+    return this.mapShiftType(match.shiftType)==='24' || this.mapShiftType(match.shiftType)==='Yİ'  ?  this.mapShiftType(match.shiftType) : '';
+  }
+}
+
+getNurseWeekdayTotal(nurse: string): number {
+  const shifts = this.scheduleMap.get(nurse);
+  if (!shifts) return 0;
+  return [...shifts].filter(s => !s.isWorkingDay &&  s.shiftType.trim() === 'Confirmed').length;
+}
+
+
+
+
+getNurseTotal(nurse: string): number {
+  const shifts = this.scheduleMap.get(nurse);
+  if (!shifts) return 0;
+
+ return [...shifts]
+    .filter(s => s.shiftType.trim() === 'Confirmed') // R: Confirmed
+    .length;
+}
+
+
+  // --- Footer’da haftasonu, hafta içi ve ay toplamları ---
+ getFooterWeekendTotal(): number {
+  let total = 0;
+
+  this.scheduleMap.forEach((shifts) => {
+    shifts.forEach(shift => {
+      if (shift.isWorkingDay &&  this.mapShiftType(shift.shiftType) === '24' ) {
+        total++;
+      }
+    });
+  });
+
+  return total;
+}
+
+
+  getFooterWeekdayTotal(): number {
+   let total = 0;
+
+  this.scheduleMap.forEach((shifts) => {
+    shifts.forEach(shift => {
+      if (!shift.isWorkingDay &&  this.mapShiftType(shift.shiftType) === '24' ) {
+        total++;
+      }
+    });
+  });
+
+  return total;
+  }
+
+  getFooterTotal(): number {
+    // Ay toplamı = tüm gün sütun toplamları
+    return Object.values(this.dayTotals).reduce((a, b) => a + b, 0);
   }
 }

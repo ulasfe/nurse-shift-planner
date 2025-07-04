@@ -1,1 +1,93 @@
-<p>excel-upload works!</p>
+<!-- Debug: Array’lerin içini görün -->
+
+ <h2>Excel Dosyası Yükle</h2>
+    <input type="file" (change)="onFileChange($event)" accept=".xlsx, .xls" />
+
+    <table
+      *ngIf="data.length > 0"
+      border="1"
+      style="margin-top:20px; width: 100%;"
+    >
+      <thead>
+        <tr>
+          <th *ngFor="let col of cols">{{ col.header }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of data">
+          <td *ngFor="let col of cols">{{ row[col.field] }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <button
+      *ngIf="data.length > 0"
+      (click)="prepareAndSend()"
+      style="margin-top: 20px;"
+    >
+      Verileri Gönder
+    </button>
+
+    <div *ngIf="scheduleData.length > 0" style="margin-top: 40px;">
+  <h3>Oluşturulan Nöbet Listesi</h3>
+  <table border="1" style="width: 100%; margin-top: 10px;">
+    <thead>
+      <tr>
+        <th>Gün</th>
+        <th>Hemşireler</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let schedule of scheduleData">
+        <td>{{ schedule.day }}</td>
+        <td>
+          <ul style="margin: 0; padding-left: 20px;">
+            <li *ngFor="let nurse of schedule.nurses">{{ nurse }}</li>
+          </ul>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<table *ngIf="days.length && nurseList.length" class="excel-table" border="1">
+  <thead>
+    <tr>
+      <th>Ad Soyad</th>
+      <th *ngFor="let day of days">{{ day }}</th>
+      <th>Haftasonu Toplam</th>
+      <th>Haftaiçi Toplam</th>
+      <th>Ay Toplamı</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr *ngFor="let nurse of nurseList">
+      <td>{{ nurse }}</td> 
+      <td
+        *ngFor="let day of days"
+        [ngClass]="getCellClass(nurse, day)"
+      >
+        {{ getCellValue(nurse, day) }}
+      </td>
+      <td>{{ getNurseWeekdayTotal(nurse) }}</td>
+      <td>{{ getNurseWeekendTotal(nurse) }}</td>
+      <td>{{ getNurseTotal(nurse) }}</td>
+    </tr>
+  </tbody>
+  <tfoot>
+    <tr>
+      <td><strong>Gün Toplamı</strong></td>
+      <td *ngFor="let day of days">{{ dayTotals[day] }}</td>
+      <td><strong>{{ getFooterWeekdayTotal() }}</strong></td>
+      <td><strong>{{ getFooterWeekendTotal() }}</strong></td>
+      <td><strong>{{ getFooterTotal() }}</strong></td>
+    </tr>
+  </tfoot>
+</table>
+
+
+
+
+<app-pivot-display [scheduleData]="scheduleData"></app-pivot-display>
+
+

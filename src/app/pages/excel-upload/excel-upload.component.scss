@@ -1,0 +1,16 @@
+  .scheduled-cell {
+    background-color: #d4edda; /* yeşil */
+  }
+
+.weekend-cell {
+  background-color: #36f66c !important;
+}
+
+  .scheduled-cell.weekend-cell {
+    background-color: #b6d4fe; /* farklı bir renk — nöbetli hafta sonu */
+  }
+
+  .excel-table td, .excel-table th {
+    padding: 4px;
+    text-align: center;
+  }
