@@ -58,6 +58,8 @@
       <th>Haftasonu Toplam</th>
       <th>Haftaiçi Toplam</th>
       <th>Ay Toplamı</th>
+      <th>Toplam Çalışma Saati</th>
+      <th>Mesai Saati</th>
     </tr>
   </thead>
   <tbody>
@@ -69,9 +71,11 @@
       >
         {{ getCellValue(nurse, day) }}
       </td>
-      <td>{{ getNurseWeekdayTotal(nurse) }}</td>
       <td>{{ getNurseWeekendTotal(nurse) }}</td>
+      <td>{{ getNurseWeekdayTotal(nurse) }}</td>
       <td>{{ getNurseTotal(nurse) }}</td>
+      <td>{{ getWorkHoursTotal(nurse) }}</td>
+      <td>{{ getExtraWorkHoursTotal(nurse) }}</td>
     </tr>
   </tbody>
   <tfoot>
@@ -80,7 +84,9 @@
       <td *ngFor="let day of days">{{ dayTotals[day] }}</td>
       <td><strong>{{ getFooterWeekdayTotal() }}</strong></td>
       <td><strong>{{ getFooterWeekendTotal() }}</strong></td>
-      <td><strong>{{ getFooterTotal() }}</strong></td>
+      <td><strong>{{ getFooterTotal() }}</strong></td>      
+      <td><strong>{{ getFooterWorkHoursTotal() }}</strong></td>
+      <td><strong>{{ getFooterExtraWorkHoursTotal() }}</strong></td>
     </tr>
   </tfoot>
 </table>

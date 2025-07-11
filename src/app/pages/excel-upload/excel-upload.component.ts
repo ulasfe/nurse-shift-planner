@@ -89,6 +89,7 @@ export class ExcelUploadComponent {
       case 'İ': return 'Permission';
       case 'Yİ': return 'Annual';
       case 'NÇ': return 'AfterShift';
+      case 'EX': return 'ExtraWorkHours';
     }
   }
 
@@ -108,7 +109,7 @@ export class ExcelUploadComponent {
       const dayStr = this.cols[i].field;
       const value = row[dayStr]?.toString().trim();
 
-      if (['24', 'R', 'İ', 'Yİ', 'NÇ'].includes(value)) {
+      if (['24', 'R', 'İ', 'Yİ', 'NÇ','EX'].includes(value)) {
         const shiftType = this.mapShiftCode(value as ShiftCode);
 // --- Burada DateOnly formatına dönüş yap ---
     const dayNum = parseInt(dayStr, 10); // Excel başlığından gelen gün numarası
@@ -157,7 +158,9 @@ this.http.post<{ [day: string]: ShiftResponse[] }>('http://localhost:5000/api/Nu
       }
 
       // Günleri sırala
-      this.days = Object.keys(response).sort((a, b) => +a - +b);
+     this.days = Object.keys(response)
+  .filter(day => day !== "ExtraWorkHours" && day !== "WorkHours" ) // ExtraWorkHours'ı hariç tut
+  .sort((a, b) => +a - +b); // Sayısal sıralama
      console.log('Gelen data:', response);
       // Hemşireleri sırala
       this.nurseList = Array.from(this.scheduleMap.keys()).sort((a, b) =>
@@ -193,6 +196,8 @@ this.http.post<{ [day: string]: ShiftResponse[] }>('http://localhost:5000/api/Nu
     case 'Permission': return 'İ';
     case 'Annual': return 'Yİ';
     case 'AfterShift': return 'NÇ';
+    case 'ExtraWorkHours': return 'EX';
+    case 'WorkHours': return 'WH';
     default: return '';
   }
 }
@@ -201,7 +206,7 @@ getNurseWeekendTotal(nurse: string): number {
   var total = 0;
   const shifts = this.scheduleMap.get(nurse);
   if (!shifts) return 0;
-  total =[...shifts].filter(s =>s.isWorkingDay && s.shiftType.trim() === 'Confirmed').length
+  total =[...shifts].filter(s =>!s.isWorkingDay && s.shiftType.trim() === 'Confirmed').length
   return total ;
 }
 
@@ -226,22 +231,44 @@ getCellValue(nurse: string, day: string): string {
   if (!shifts) return '';
 
   const match = [...shifts].find(s => s.day.toString() === day.toString());
-
+ console.log('match:', match);
   if (!match) {
     return '';
   } else {
-    return this.mapShiftType(match.shiftType)==='24' || this.mapShiftType(match.shiftType)==='Yİ'  ?  this.mapShiftType(match.shiftType) : '';
+    const mappedType = this.mapShiftType(match.shiftType);
+    if (mappedType === '24' || mappedType === 'Yİ') {
+      return mappedType;
+    } else  {
+      return ''; // veya istediğiniz başka bir gösterim
+    }
+    return '';
   }
 }
 
 getNurseWeekdayTotal(nurse: string): number {
   const shifts = this.scheduleMap.get(nurse);
   if (!shifts) return 0;
-  return [...shifts].filter(s => !s.isWorkingDay &&  s.shiftType.trim() === 'Confirmed').length;
+  return [...shifts].filter(s => s.isWorkingDay &&  s.shiftType.trim() === 'Confirmed').length;
+}
+
+getExtraWorkHoursTotal(nurse: string): number {
+  const shifts = this.scheduleMap.get(nurse);
+  if (!shifts) return 0;
+
+  return [...shifts]
+    .filter(s => s.isWorkingDay && s.shiftType?.trim() === 'ExtraWorkHours')
+    .reduce((total, shift) => total + (shift.workHours || 0), 0); // workHours değerlerini topla
 }
 
 
+getWorkHoursTotal(nurse: string): number {
+  const shifts = this.scheduleMap.get(nurse);
+  if (!shifts) return 0;
 
+  return [...shifts]
+    .filter(s => s.isWorkingDay && s.shiftType?.trim() === 'WorkHours')
+    .reduce((total, shift) => total + (shift.workHours || 0), 0); // workHours değerlerini topla
+}
 
 getNurseTotal(nurse: string): number {
   const shifts = this.scheduleMap.get(nurse);
@@ -268,6 +295,34 @@ getNurseTotal(nurse: string): number {
   return total;
 }
 
+
+getFooterExtraWorkHoursTotal(): number {
+   let total = 0;
+
+  this.scheduleMap.forEach((shifts) => {
+    shifts.forEach(shift => {
+      if (this.mapShiftType(shift.shiftType) === 'EX') {
+        total += shift.workHours;
+      }
+    });
+  });
+
+  return total;
+  }
+
+  getFooterWorkHoursTotal(): number {
+   let total = 0;
+
+  this.scheduleMap.forEach((shifts) => {
+    shifts.forEach(shift => {
+      if (this.mapShiftType(shift.shiftType) === 'WH') {
+        total += shift.workHours;
+      }
+    });
+  });
+
+  return total;
+  }
 
   getFooterWeekdayTotal(): number {
    let total = 0;

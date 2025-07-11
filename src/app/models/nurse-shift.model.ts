@@ -1,6 +1,6 @@
-export type ShiftCode = '24' | 'R' | 'İ' | 'Yİ' | 'NÇ';
+export type ShiftCode = '24' | 'R' | 'İ' | 'Yİ' | 'NÇ'|'EX';
 
-export type ShiftType = 'Confirmed' | 'Report' | 'Permission' | 'Annual' | 'AfterShift' | 'Free' | 'BeforeShift';
+export type ShiftType = 'Confirmed' | 'Report' | 'Permission' | 'Annual' | 'AfterShift' | 'Free' | 'BeforeShift'|'ExtraWorkHours'|'WorkHours';
 
 export interface ShiftEntry {
   date: string; // Örn: "2025-06-01"
@@ -18,4 +18,5 @@ export interface ShiftResponse {
   shiftType: ShiftType; // 0=Off, 1=Confirmed, 2=Vacation, 3=Sick
   day: string;
   isWorkingDay: boolean;
+  workHours: number;  
 }
