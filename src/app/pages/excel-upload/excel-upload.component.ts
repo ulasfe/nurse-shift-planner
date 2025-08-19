@@ -2,13 +2,14 @@ import { Component } from '@angular/core';
 import * as XLSX from 'xlsx';
 import { CommonModule } from '@angular/common';
 import { NurseShift, ShiftCode, ShiftEntry, ShiftResponse } from '../../models/nurse-shift.model';
+import { MonthYearPickerComponent } from '../../month-year-picker/month-year-picker.component';
 import { HttpClient, HttpClientModule } from '@angular/common/http';
 import { PivotDisplayComponent } from '../pivot-display/pivot-display.component';
 
 @Component({
   selector: 'app-excel-upload',
   standalone: true,
-  imports: [CommonModule,PivotDisplayComponent, HttpClientModule],
+  imports: [CommonModule,PivotDisplayComponent, HttpClientModule,MonthYearPickerComponent],
     styleUrls: ['./excel-upload.component.scss'],
  templateUrl: './excel-upload.component.html',
 })

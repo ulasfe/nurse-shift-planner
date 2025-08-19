@@ -1,0 +1,19 @@
+<mat-form-field appearance="fill">
+  <mat-label>Choose month and year</mat-label>
+  <input
+    matInput
+    [matDatepicker]="picker"
+    [value]="date"
+    readonly
+  >
+  <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+  <mat-datepicker 
+    #picker 
+    startView="multi-year"
+    (yearSelected)="chosenYearHandler($event)"
+    (monthSelected)="chosenMonthHandler($event, picker)"
+    panelClass="month-picker">
+  </mat-datepicker>
+</mat-form-field>
+
+<p>You selected: {{ date | date:'MMMM yyyy' }}</p>
