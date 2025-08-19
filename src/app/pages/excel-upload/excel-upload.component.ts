@@ -25,6 +25,13 @@ export class ExcelUploadComponent {
   constructor(private http: HttpClient) {}
 
   onFileChange(evt: any) {
+  this.data = [];
+  this.cols = [];
+  this.shiftData = [];
+  this.scheduleMap.clear();
+  this.days = [];
+  this.nurseList = [];
+  this.dayTotals = {};
     const target: DataTransfer = <DataTransfer>evt.target;
     if (target.files.length !== 1) {
       throw new Error('Lütfen tek bir dosya seçin.');
